@@ -53,7 +53,7 @@ If unset, it defaults to `"PES User <pes@localhost>"`.
 | `tree.h`           | Tree object interface                | Do not modify                                      |
 | `tree.c`           | Tree serialization and construction  | Implement `tree_from_index`                        |
 | `index.h`          | Staging area interface               | Do not modify                                      |
-| `index.c`          | Staging area (text-based index file) | Implement `index_load`, `index_save`, `index_add`, |
+| `index.c`          | Staging area (text-based index file) | Implement `index_load`, `index_save`, `index_add`  |
 | `commit.h`         | Commit object interface              | Do not modify                                      |
 | `commit.c`         | Commit creation and history          | Implement `commit_create`                          |
 | `pes.c`            | CLI entry point and command dispatch | Do not modify                                      |
@@ -388,17 +388,9 @@ The test program verifies:
 
 ### What to Implement
 
-Open `tree.c`. Three functions are marked `// TODO`:
+Open `tree.c`. Implement the function marked `// TODO`:
 
-1. **`tree_parse`** — Parses raw binary tree data into a `Tree` struct.
-   - Binary format per entry: `"<mode> <name>\0<32-byte-hash>"`
-   - Mode is ASCII octal (e.g., `"100644"`), name is a string, hash is 32 raw bytes
-
-2. **`tree_serialize`** — Serializes a `Tree` struct to binary format.
-   - **Must sort entries by name** before serialization (required for deterministic hashing)
-   - Same binary format as above
-
-3. **`tree_from_index`** — Builds a tree hierarchy from the index.
+1. **`tree_from_index`** — Builds a tree hierarchy from the index.
    - Handles nested paths: `"src/main.c"` must create a `src` subtree
    - This is what `pes commit` uses to create the snapshot
    - Writes all tree objects to the object store and returns the root hash
@@ -428,7 +420,7 @@ The test program verifies:
 
 ### What to Implement
 
-Open `index.c`. Four functions are marked `// TODO`:
+Open `index.c`. Three functions are marked `// TODO`:
 
 1. **`index_load`** — Reads the text-based `.pes/index` file into an `Index` struct.
    - If the file doesn't exist, initializes an empty index (this is not an error)
@@ -441,23 +433,21 @@ Open `index.c`. Four functions are marked `// TODO`:
 3. **`index_add`** — Stages a file: reads it, writes blob to object store, updates index entry.
    - Use the provided `index_find` to check for an existing entry
 
-4. **`index_status`** — Prints the status of the working directory (staged changes, unstaged changes, untracked files).
-
-`index_find` and `index_remove` are already implemented for you — read them to understand the index data structure before starting.
+`index_find` , `index_status` and `index_remove` are already implemented for you — read them to understand the index data structure before starting.
 
 #### Expected Output of `pes status`
 
 ```
 Staged changes:
-    new file:   hello.txt
-    modified:   src/main.c
+  staged:     hello.txt
+  staged:     src/main.c
 
 Unstaged changes:
-    modified:   README.md
-    deleted:    old_file.txt
+  modified:   README.md
+  deleted:    old_file.txt
 
 Untracked files:
-    notes.txt
+  untracked:  notes.txt
 ```
 
 If a section has no entries, print the header followed by `(nothing to show)`.
@@ -484,28 +474,19 @@ cat .pes/index    # Human-readable text format
 
 **Filesystem Concepts:** Linked structures on disk, reference files, atomic pointer updates
 
-**Files:** `commit.h` (read), `commit.c` (implement all TODO functions), `pes.c` (implement `cmd_commit`)
+**Files:** `commit.h` (read), `commit.c` (implement all TODO functions)
 
 ### What to Implement
 
-Open `commit.c`. Three functions are marked `// TODO`:
+Open `commit.c`. One function is marked `// TODO`:
 
-1. **`head_read`** — Reads the commit hash that HEAD points to. Follows symbolic refs (HEAD → branch file → commit hash).
-
-2. **`head_update`** — Atomically updates the current branch ref to a new commit hash. This is the "pointer swing" — the single atomic operation that publishes a commit.
-
-3. **`commit_create`** — The main commit function:
+1. **`commit_create`** — The main commit function:
    - Builds a tree from the index using `tree_from_index()` (**not** from the working directory — commits snapshot the staged state)
    - Reads current HEAD as the parent (may not exist for first commit)
    - Gets the author string from `pes_author()` (defined in `pes.h`)
    - Writes the commit object, then updates HEAD
 
-`commit_parse`, `commit_serialize`, and `commit_walk` are already implemented — read them to understand the commit format before writing `commit_create`.
-
-Also implement **`cmd_commit`** in `pes.c`:
-- Parse `-m <message>` from command-line arguments
-- If `-m` is missing, print: `error: commit requires a message (-m "message")`
-- On success, print: `Committed: <first-12-hex-chars>... <message>`
+`commit_parse`, `commit_serialize`, `commit_walk`, `head_read`, and `head_update` are already implemented — read them to understand the commit format before writing `commit_create`.
 
 The commit text format is specified in the comment at the top of `commit.c`.
 
@@ -587,7 +568,6 @@ The following questions cover filesystem concepts beyond the implementation scop
 | `tree.c`       | Tree serialization and construction      |
 | `index.c`      | Staging area implementation              |
 | `commit.c`     | Commit creation and history walking      |
-| `pes.c`        | CLI entry point with `cmd_commit`        |
 
 ### Analysis Questions (written answers)
 
@@ -612,25 +592,6 @@ The following questions cover filesystem concepts beyond the implementation scop
 **3. Commit History (Graded Requirement)**
 * **Minimum Requirement:** You must have a minimum of **5 commits per phase** with appropriate commit messages. Submitting fewer than 5 commits for any given phase will result in a deduction of marks.
 * **Best Practices:** We highly prefer more than 5 detailed commits per phase. Granular commits that clearly show the delta in code block changes allow us to verify your step-by-step understanding of the concepts and prevent penalties <3
----
-
-## Filesystem Concept Coverage
-
-| Concept                     | Where It Appears                                |
-| --------------------------- | ----------------------------------------------- |
-| Content-addressable storage | Phase 1 — object store                          |
-| Directory sharding          | Phase 1 — `.pes/objects/XX/`                    |
-| Atomic writes               | Phases 1, 3, 4 — all writes use temp+rename     |
-| Hashing for integrity       | Phase 1 — corruption detection                  |
-| Directory representation    | Phase 2 — tree objects                          |
-| File modes and permissions  | Phase 2 — tree entries (100644, 100755, 040000) |
-| File format design          | Phase 3 — index text format                     |
-| Change detection            | Phase 3 — mtime+size optimization in status     |
-| Reference files             | Phase 4 — branches and HEAD                     |
-| Linked structures on disk   | Phase 4 — commit parent chain                   |
-| Atomic pointer updates      | Phase 4 — commit publication via ref update     |
-| Working directory sync      | Q5.1 — checkout (analysis)                      |
-| Reachability / free-space   | Q6.1 — garbage collection (analysis)            |
 
 ---
 
