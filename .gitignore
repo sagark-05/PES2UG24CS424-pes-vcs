@@ -1,0 +1,9 @@
+*.o
+pes
+test_objects
+test_tree
+.pes/
+file1.txt
+file2.txt
+hello.txt
+bye.txt
